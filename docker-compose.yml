@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  excalidraw:
+    build:
+      context: .
+      args:
+        EXCALIDRAW_REPO: ${EXCALIDRAW_REPO:-https://github.com/excalidraw/excalidraw.git}
+        EXCALIDRAW_REF: ${EXCALIDRAW_REF:-master}
+    image: excalidraw-fastapi:latest
+    container_name: excalidraw
+    environment:
+      - STORAGE_TYPE=${STORAGE_TYPE:-filesystem}
+      - LOCAL_STORAGE_PATH=${LOCAL_STORAGE_PATH:-/app/data}
+      - FRONTEND_DIR=${FRONTEND_DIR:-/app/frontend/build}
+      - HOST=0.0.0.0
+      - PORT=8888
+    ports:
+      - "8888:8888"
+    volumes:
+      # Mount data dir when using filesystem storage
+      - ./data:/app/data
