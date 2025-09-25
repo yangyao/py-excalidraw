@@ -1,267 +1,130 @@
-# Excalidraw All-in-One
+# Excalidraw All‑in‑One
 
-All-in-one Excalidraw service using a Python FastAPI backend — simple and compatible with Excalidraw's raw-bytes protocol and Firebase-like routes.
+All‑in‑one Excalidraw deployment with a Python FastAPI backend. Ships a built frontend, a simple persistence API compatible with Excalidraw, and a lightweight admin UI.
 
-## Features
+## Table of Contents
+- Overview
+- Quick Start
+- Configuration
+- Admin UI
+- APIs
+- Build & Deploy (GitHub Actions)
+- Reverse Proxy (Caddy)
+- Maintenance (Scripts)
+- Troubleshooting
+- Notes
 
-- Serves the built Excalidraw frontend from `./frontend/build`.
-- Document persistence API compatible with Excalidraw's save/load:
-  - `POST /api/v2/post/` → `{ "id": "..." }`
-  - `GET /api/v2/{id}/` → returns saved binary payload
-- **Web-based admin interface** for managing saved canvases:
-  - View all saved documents with metadata (size, creation time, custom names)
-  - Set custom names for better organization
-  - Open documents directly in new tabs
-  - Delete documents with confirmation
-- Minimal Firebase proxy emulation used by Excalidraw:
-  - `POST /v1/projects/{project}/databases/{db}/documents:commit`
-  - `POST /v1/projects/{project}/databases/{db}/documents:batchGet`
-- Pluggable storage backends: memory (default) and filesystem.
+## Overview
+- Serves the Excalidraw frontend (built inside the image).
+- Save/load binary protocol compatible with Excalidraw.
+- Simple web admin to list/open/delete documents and set names.
+- Minimal Firebase proxy endpoints used by Excalidraw.
+- Storage backends: memory (default) or filesystem.
 
 ## Quick Start
 
-### Option 1: Using Scripts (Recommended)
-
-Use the provided scripts for easier management:
+Option A — Makefile (recommended)
 
 ```bash
-# Build and start the service (detached by default)
-./scripts/build_and_up.sh
+# Build
+make build PUBLIC_ORIGIN="http://127.0.0.1:8888"
 
-# Or with specific Excalidraw version
-EXCALIDRAW_REF=v0.17.3 ./scripts/build_and_up.sh
+# Start (detached)
+make up PUBLIC_ORIGIN="http://127.0.0.1:8888"
 
-# Or run in foreground
-./scripts/build_and_up.sh --no-detach
+# Specific upstream version
+make build EXCALIDRAW_REF=v0.17.3 PUBLIC_ORIGIN="http://127.0.0.1:8888"
+
+# Foreground
+make up-fg PUBLIC_ORIGIN="http://127.0.0.1:8888"
+
+# Stop / cleanup
+make down
+make clean-image
+make clean-data
 ```
 
-Stop the service:
+Note: Without make, you can run the equivalent `docker buildx` and `docker run` commands directly.
 
-```bash
-# Basic teardown
-./scripts/teardown.sh
+## Configuration
 
-# Remove image and data
-./scripts/teardown.sh --remove-image --remove-data
-```
+Build‑time (frontend endpoints)
+- `PUBLIC_ORIGIN` (required for production): e.g., `https://chart.example.com`
+- `WS_ORIGIN` (optional): defaults to `PUBLIC_ORIGIN`
+- `EXCALIDRAW_REPO` (optional): upstream repo URL (default official)
+- `EXCALIDRAW_REF` (optional): branch/tag/commit (default `master`)
 
-### Option 2: Plain Docker
+Runtime (container env)
+- `STORAGE_TYPE`: `memory` | `filesystem`
+- `LOCAL_STORAGE_PATH`: data path for filesystem storage (default `/app/data`)
+- `PUBLIC_ORIGIN`: admin page uses this origin when opening documents in the main app
 
-Build the image with your public origin baked into the frontend, then run the container:
+## Admin UI
 
-```bash
-# Build (amd64), set your public origin for the frontend
-docker buildx build \
-  --platform linux/amd64 \
-  --build-arg PUBLIC_ORIGIN="http://127.0.0.1:8888" \
-  -t excalidraw-fastapi:latest \
-  --load .
+Access
+- `http://127.0.0.1:8888/admin`
 
-# Run (filesystem storage persisted to ./data)
-mkdir -p ./data
-docker run -d \
-  --name excalidraw \
-  --restart=always \
-  -p 8888:8888 \
-  -e STORAGE_TYPE=filesystem \
-  -e LOCAL_STORAGE_PATH=/app/data \
-  -e PUBLIC_ORIGIN="http://127.0.0.1:8888" \
-  -v $(pwd)/data:/app/data \
-  excalidraw-fastapi:latest
+Behavior
+- The admin page’s “Open” buttons point to `PUBLIC_ORIGIN`, so if you serve the app at `chart.example.com` and admin at `chart-admin.example.com`, clicking “Open” will open on the main site.
 
-echo "Open http://127.0.0.1:8888"
-```
-
-## Admin Interface
-
-The service includes a web-based admin interface for managing saved canvases:
-
-**Access:** http://127.0.0.1:8888/admin
-
-Admin links origin
-- The admin page's “Open” buttons point to the main app origin.
-- Configure this via runtime env `PUBLIC_ORIGIN` (e.g., `https://chart.example.com`).
-- In Docker: set `PUBLIC_ORIGIN` via `-e PUBLIC_ORIGIN=...` when running the container.
-
-### Features
-
-- **View all saved canvases** with creation time, file size, and custom names
-- **Set custom names** for canvases (useful for organization)
-- **Open canvases** directly in new tabs
-- **Delete canvases** with confirmation
-- **Refresh** the list to see latest changes
-
-### Admin API Endpoints
-
-- `GET /admin` — Web interface for canvas management
-- `GET /api/v2/admin/documents` — JSON list of all documents with metadata
-- `POST /api/v2/admin/documents/{id}/name` — Set custom name for a document
-
-The admin interface is unauthenticated by default. For production use, consider protecting it behind authentication or network restrictions.
+Security
+- The admin page is unauthenticated by default. Protect it via reverse proxy auth, IP allowlist, VPN, etc., for production.
 
 ## APIs
 
-### Document Management
-- POST `/api/v2/post/` — body is raw bytes, returns `{ "id": "..." }`
-- GET `/api/v2/{id}/` — returns raw bytes
-- DELETE `/api/v2/{id}` — delete a document by id
+Document management
+- `POST /api/v2/post/` — body is raw bytes → `{ "id": "..." }`
+- `GET /api/v2/{id}/` — returns raw bytes
+- `DELETE /api/v2/{id}` — delete by id
 
-### Admin Interface
-- GET `/admin` — web interface for managing saved canvases
-- GET `/api/v2/admin/documents` — list saved documents (id, size, createdAt, name)
-- POST `/api/v2/admin/documents/{id}/name` — set document name
+Admin
+- `GET /admin` — web interface
+- `GET /api/v2/admin/documents` — list: id, size, createdAt, name
+- `POST /api/v2/admin/documents/{id}/name` — set name
 
-### Firebase Compatibility
-- POST `/v1/projects/{project}/databases/{db}/documents:commit`
-- POST `/v1/projects/{project}/databases/{db}/documents:batchGet`
+Firebase compatibility
+- `POST /v1/projects/{project}/databases/{db}/documents:commit`
+- `POST /v1/projects/{project}/databases/{db}/documents:batchGet`
 
-## Storage Backends
+## Build & Deploy (GitHub Actions)
 
-- memory: in-process, non-persistent (default)
-- filesystem: set `STORAGE_TYPE=filesystem` and `LOCAL_STORAGE_PATH=./data` (or any directory)
+This repo includes `.github/workflows/deploy.yml` to build and deploy to a remote Linux server via SSH.
 
-## Environment Variables
-
-At runtime (container env):
-- `STORAGE_TYPE`: `memory` or `filesystem`
-- `LOCAL_STORAGE_PATH`: data path for filesystem storage (default `/app/data`)
-- `PUBLIC_ORIGIN`: public origin used by the admin page to open documents on the main site
-
-## Scripts
-
-The `scripts/` directory contains helper scripts for easier service management:
-
-### `build_and_up.sh`
-
-Builds the Docker image and starts the service with plain Docker.
-
-**Usage:**
-```bash
-./scripts/build_and_up.sh [options]
-```
-
-**Options:**
-- `-r, --repo REPO`: Excalidraw repository URL (default: https://github.com/excalidraw/excalidraw.git)
-- `-t, --ref REF`: Git reference (branch/tag/commit) (default: master)
-- `--no-detach`: Run in foreground instead of detached mode
-- `-h, --help`: Show help
-
-**Examples:**
-```bash
-# Default build and start
-./scripts/build_and_up.sh
-
-# Use specific Excalidraw version
-./scripts/build_and_up.sh -t v0.17.3
-
-# Run in foreground
-./scripts/build_and_up.sh --no-detach
-```
-
-### `teardown.sh`
-
-Stops the service and optionally removes images and data.
-
-**Usage:**
-```bash
-./scripts/teardown.sh [options]
-```
-
-**Options:**
-- `-i, --remove-image`: Remove the built Docker image
-- `--remove-data`: Remove local data directory
-- `-h, --help`: Show help
-
-**Examples:**
-```bash
-# Basic teardown
-./scripts/teardown.sh
-
-# Complete cleanup
-./scripts/teardown.sh --remove-image --remove-data
-```
-
-## Build Arguments
-
-- `EXCALIDRAW_REPO`: upstream repository URL
-- `EXCALIDRAW_REF`: branch/tag/commit hash
-- `PUBLIC_ORIGIN` (build arg): used to generate frontend endpoints baked into static assets
-- `WS_ORIGIN` (build arg): websocket origin; defaults to `PUBLIC_ORIGIN` if omitted
-
-### Frontend endpoints without editing source
-
-To avoid hardcoding your domain in the repo, the image build can generate the Excalidraw `.env` automatically when you pass `PUBLIC_ORIGIN` (and optionally `WS_ORIGIN`). This removes the need to edit `.env.excalidraw.production`.
-
-- `PUBLIC_ORIGIN` (optional): scheme and host where users access the app, e.g. `https://your-domain.example`.
-- `WS_ORIGIN` (optional): WebSocket origin; defaults to `PUBLIC_ORIGIN` if omitted.
-
-Example (docker buildx):
-
-```
-docker buildx build \
-  --platform linux/amd64 \
-  --build-arg PUBLIC_ORIGIN="https://chart.example.com" \
-  -t excalidraw-fastapi:latest \
-  --load .
-```
-
-Example (plain Docker run shown above; no compose required)
-
-What gets configured at build time:
-
-- `VITE_APP_BACKEND_V2_GET_URL` → `${PUBLIC_ORIGIN}/api/v2/`
-- `VITE_APP_BACKEND_V2_POST_URL` → `${PUBLIC_ORIGIN}/api/v2/post/`
-- `VITE_APP_PLUS_LP` and `VITE_APP_PLUS_APP` → `${PUBLIC_ORIGIN}`
-- `VITE_APP_AI_BACKEND` → `${PUBLIC_ORIGIN}/ai/`
-- `VITE_APP_WS_SERVER_URL` → `${WS_ORIGIN:-PUBLIC_ORIGIN}`
-
-## Notes
-
-- Frontend is automatically cloned and built inside the container
-- Static site is served from `FRONTEND_DIR` with SPA fallback to `index.html`
-- Admin endpoints are unauthenticated by default; protect them behind a reverse proxy or network ACL in production
-- Frontend endpoints are configured at build time via `PUBLIC_ORIGIN`/`WS_ORIGIN` build args (no local source edits needed)
-- Admin page uses runtime env `PUBLIC_ORIGIN` for cross-domain “Open” links (e.g., admin subdomain → app domain)
-
-## Deploy via GitHub Actions
-
-This repo includes a workflow `.github/workflows/deploy.yml` that builds an image and deploys it to a remote Linux server via SSH.
-
-Prerequisites on the server
-- Docker Engine installed, with the target user able to run `docker` (in the `docker` group).
-- Open TCP ports as needed (e.g., 8888 for direct access; or run Caddy in front).
+Server prerequisites
+- Docker Engine installed; the SSH user can run `docker` (in `docker` group).
+- Open necessary ports (e.g., 8888; or place Caddy/NGINX in front).
 
 Repository secrets (required)
-- `SERVER_HOST`: server IP or hostname
+- `SERVER_HOST`: server IP/hostname
 - `SERVER_USER`: SSH username
-- `SERVER_SSH_KEY`: private key content for the SSH user
-- `PUBLIC_ORIGIN`: the public origin for the app, e.g. `https://chart.example.com`
-- Optional `WS_ORIGIN`: WebSocket origin; defaults to `PUBLIC_ORIGIN` if not set
+- `SERVER_SSH_KEY`: private key for SSH auth
+- `PUBLIC_ORIGIN`: public origin (e.g., `https://chart.example.com`)
+- Optional `WS_ORIGIN`: WebSocket origin (defaults to PUBLIC_ORIGIN)
 
-How it works
-- Builds an amd64 image with build args `PUBLIC_ORIGIN` and `WS_ORIGIN` baked into the frontend.
-- Saves the image to a tarball, uploads `image.tar.gz` to the server.
-- On the server:
-  - Stages files into `${REMOTE_DIR}` (default `/opt/py-excalidraw`).
-  - Loads the image via `docker load`.
-  - Restarts a single container `excalidraw` with `docker run -d` (port 8888, persistent volume `${REMOTE_DIR}/data:/app/data`, env `PUBLIC_ORIGIN`).
+What the workflow does
+```
+push to main
+  → Buildx build (linux/amd64) with PUBLIC_ORIGIN/WS_ORIGIN baked into frontend
+  → docker save image.tar.gz and upload to server via SCP
+  → SSH: docker load → rm -f old container → docker run -d with env + volume
+  → (Optional) Caddy proxies 80/443 to :8888
+```
 
 Usage
 - Automatic: push to `main` triggers the workflow.
-- Manual: use “Run workflow” in Actions; you may optionally override `excalidraw_repo` and `excalidraw_ref`.
+- Manual: “Run workflow” in Actions; you can override `excalidraw_repo` and `excalidraw_ref`.
 
 Troubleshooting
-- Platform mismatch: the workflow builds `linux/amd64` and loads locally to avoid arm64/amd64 issues.
-- Permissions: if Docker requires sudo on your server, add the SSH user to the `docker` group or adapt the workflow to prefix `sudo` where needed.
+- Platform mismatch: the workflow builds for `linux/amd64` to avoid arm64/amd64 conflicts.
+- Permissions: add SSH user to `docker` group, or adapt the workflow to use `sudo docker`.
 
-## Caddy Reverse Proxy (Dual Domains)
+## Reverse Proxy (Caddy)
 
 Goal
-- Serve the app at `chart.example.com`.
-- Serve the admin at `chart-admin.example.com`, with `/` rewritten to `/admin`.
+- Serve app at `chart.example.com`.
+- Serve admin at `chart-admin.example.com`, rewriting `/` → `/admin`.
 
-Host (bare‑metal) Caddy
-- Caddyfile:
+Host Caddyfile (bare metal)
 
 ```
 chart.example.com {
@@ -283,11 +146,7 @@ chart-admin.example.com {
 }
 ```
 
-- DNS: point both domains to the server IP (A/AAAA records).
-- Reload: `caddy reload --config /etc/caddy/Caddyfile`.
-
-Dockerized Caddy
-- Example compose service:
+Dockerized Caddy (example service)
 
 ```
 services:
@@ -306,8 +165,41 @@ volumes:
   caddy_config:
 ```
 
-- In the Caddyfile, change upstream to `excalidraw:8888` when proxying within the compose network.
-
 Notes
-- Caddy will manage TLS automatically via Let's Encrypt; ensure ports 80/443 are open and DNS is correct.
-- Using a separate admin domain forces full-page navigation to `/admin`, avoiding SPA/Service Worker interception on the main app origin.
+- Caddy will manage TLS automatically; ensure ports 80/443 are open and DNS points to the server.
+- Using a separate admin domain forces full‑page navigation (avoids SPA/Service Worker interception).
+
+## Maintenance (Makefile)
+
+Targets
+- `make build` — build image (amd64) with frontend URLs baked in
+- `make up` — start container detached (recreates if exists)
+- `make up-fg` — start container in foreground
+- `make down` — stop & remove container
+- `make logs` — follow logs
+- `make ps` — show container status
+- `make clean-image` — remove built image
+- `make clean-data` — remove local `./data`
+
+Variables (override via CLI or env)
+- `EXCALIDRAW_REPO`, `EXCALIDRAW_REF`
+- `PUBLIC_ORIGIN`, `WS_ORIGIN`
+- `IMAGE`, `CONTAINER`, `PORT`, `DATA_DIR`
+
+## Troubleshooting
+- App not reachable:
+  - Check `docker ps` and `docker logs --tail 200 excalidraw`.
+  - Ensure port mapping `-p 8888:8888` and firewall rules.
+- Admin page opens on wrong origin:
+  - Set runtime env `PUBLIC_ORIGIN` to your main app domain.
+- Platform mismatch (arm64 host build → amd64 server):
+  - Build with `--platform linux/amd64` (already in CI and scripts).
+- Filesystem storage not persisted:
+  - Ensure volume mount to `/app/data` and `STORAGE_TYPE=filesystem`.
+
+## Notes
+- Frontend is cloned and built during the image build.
+- Static site is served with SPA fallback (`index.html`).
+- Admin endpoints are unauthenticated; protect in production.
+- Frontend URLs are set at build time via `PUBLIC_ORIGIN`/`WS_ORIGIN`.
+- Admin page uses runtime `PUBLIC_ORIGIN` to open docs on the main app origin.
