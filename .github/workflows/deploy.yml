@@ -31,11 +31,15 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build \
+          # Build amd64 image so it runs on typical x86 servers
+          docker buildx build \
+            --platform linux/amd64 \
             --build-arg EXCALIDRAW_REPO="${{ inputs.excalidraw_repo || 'https://github.com/excalidraw/excalidraw.git' }}" \
             --build-arg EXCALIDRAW_REF="${{ inputs.excalidraw_ref || 'master' }}" \
             --build-arg ENV_FILE=".env.excalidraw.production" \
-            -t "$IMAGE_NAME" .
+            -t "$IMAGE_NAME" \
+            --load \
+            .
 
       - name: Save Docker image
         run: docker save "$IMAGE_NAME" | gzip > image.tar.gz
@@ -69,14 +73,32 @@ jobs:
             sudo mkdir -p "$REMOTE_DIR" "$REMOTE_DIR/data"
             sudo chown -R "$USER":"$USER" "$REMOTE_DIR"
 
+            echo "Contents of $DEPLOY_TMP before staging:"
+            ls -la "$DEPLOY_TMP" || true
+            if [ -d "$DEPLOY_TMP/upload" ]; then
+              echo "Found nested upload directory; flattening…"
+              mv -f "$DEPLOY_TMP"/upload/* "$DEPLOY_TMP"/ || true
+              rmdir "$DEPLOY_TMP/upload" || true
+              echo "Contents of $DEPLOY_TMP after flatten:"
+              ls -la "$DEPLOY_TMP" || true
+            fi
+
             # Update docker-compose.yml
             if [ -f "$DEPLOY_TMP/docker-compose.yml" ]; then
               mv -f "$DEPLOY_TMP/docker-compose.yml" "$REMOTE_DIR/docker-compose.yml"
+            elif [ -f "$DEPLOY_TMP/upload/docker-compose.yml" ]; then
+              mv -f "$DEPLOY_TMP/upload/docker-compose.yml" "$REMOTE_DIR/docker-compose.yml"
+            else
+              echo "docker-compose.yml not found in $DEPLOY_TMP" >&2
             fi
 
             # Load Docker image
             if [ -f "$DEPLOY_TMP/image.tar.gz" ]; then
               gunzip -c "$DEPLOY_TMP/image.tar.gz" | docker load
+            elif [ -f "$DEPLOY_TMP/upload/image.tar.gz" ]; then
+              gunzip -c "$DEPLOY_TMP/upload/image.tar.gz" | docker load
+            else
+              echo "image.tar.gz not found in $DEPLOY_TMP; proceeding if image already exists" >&2
             fi
 
             # Pick docker compose command
@@ -90,7 +112,18 @@ jobs:
             fi
 
             cd "$REMOTE_DIR"
-            $DC up -d
+            # Quick sanity check for compose file presence
+            ls -la "$REMOTE_DIR"
+            if [ ! -f "$REMOTE_DIR/docker-compose.yml" ]; then
+              echo "Compose file missing at $REMOTE_DIR/docker-compose.yml" >&2
+              exit 1
+            fi
+            # Use explicit compose file path and avoid rebuilding on server
+            $DC -f "$REMOTE_DIR/docker-compose.yml" up -d --no-build
+            echo "Compose services status:"
+            $DC -f "$REMOTE_DIR/docker-compose.yml" ps || true
+            echo "Docker containers (including exited):"
+            docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' | sed -n '1,50p' || true
 
       - name: Deployment status
         if: always()
