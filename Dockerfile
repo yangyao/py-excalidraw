@@ -3,12 +3,36 @@ FROM node:18 AS frontend-build
 
 ARG EXCALIDRAW_REPO=https://github.com/excalidraw/excalidraw.git
 ARG EXCALIDRAW_REF=master
-ARG ENV_FILE=.env.excalidraw.local
+ARG PUBLIC_ORIGIN
+ARG WS_ORIGIN
 
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 
-COPY ${ENV_FILE} /src/.env.excalidraw
+# Always generate frontend env from build args to avoid hardcoding in repo
+RUN set -eux; \
+    PO="${PUBLIC_ORIGIN:-http://localhost:8888}"; PO="${PO%/}"; \
+    WO="${WS_ORIGIN:-$PO}"; WO="${WO%/}"; \
+    echo 'MODE="production"' > /src/.env.excalidraw; \
+    echo "VITE_APP_BACKEND_V2_GET_URL=${PO}/api/v2/" >> /src/.env.excalidraw; \
+    echo "VITE_APP_BACKEND_V2_POST_URL=${PO}/api/v2/post/" >> /src/.env.excalidraw; \
+    echo "VITE_APP_LIBRARY_URL=https://libraries.excalidraw.com" >> /src/.env.excalidraw; \
+    echo "VITE_APP_LIBRARY_BACKEND=https://us-central1-excalidraw-room-persistence.cloudfunctions.net/libraries" >> /src/.env.excalidraw; \
+    echo "VITE_APP_PLUS_LP=${PO}" >> /src/.env.excalidraw; \
+    echo "VITE_APP_PLUS_APP=${PO}" >> /src/.env.excalidraw; \
+    echo "VITE_APP_AI_BACKEND=${PO}/ai/" >> /src/.env.excalidraw; \
+    echo "VITE_APP_WS_SERVER_URL=${WO}" >> /src/.env.excalidraw; \
+    echo "VITE_APP_ENABLE_TRACKING=false" >> /src/.env.excalidraw; \
+    echo "VITE_APP_PLUS_EXPORT_PUBLIC_KEY='MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApQ0jM9Qz8TdFLzcuAZZX" >> /src/.env.excalidraw; \
+    echo "/WvuKSOJxiw6AR/ZcE3eFQWM/mbFdhQgyK8eHGkKQifKzH1xUZjCxyXcxW6ZO02t" >> /src/.env.excalidraw; \
+    echo "kPOPxhz+nxUrIoWCD/V4NGmUA1lxwHuO21HN1gzKrN3xHg5EGjyouR9vibT9VDGF" >> /src/.env.excalidraw; \
+    echo "gq6+4Ic/kJX+AD2MM7Yre2+FsOdysrmuW2Fu3ahuC1uQE7pOe1j0k7auNP0y1q53" >> /src/.env.excalidraw; \
+    echo "PrB8Ts2LUpepWC1l7zIXFm4ViDULuyWXTEpUcHSsEH8vpd1tckjypxCwkipfZsXx" >> /src/.env.excalidraw; \
+    echo "iPszy0o0Dx2iArPfWMXlFAI9mvyFCyFC3+nSvfyAUb2C4uZgCwAuyFh/ydPF4DEE" >> /src/.env.excalidraw; \
+    echo "PQIDAQAB'" >> /src/.env.excalidraw; \
+    echo "VITE_APP_DEBUG_ENABLE_TEXT_CONTAINER_BOUNDING_BOX=false" >> /src/.env.excalidraw; \
+    echo "VITE_APP_COLLAPSE_OVERLAY=false" >> /src/.env.excalidraw; \
+    echo "VITE_APP_ENABLE_ESLINT=false" >> /src/.env.excalidraw;
 
 RUN git clone --depth 1 ${EXCALIDRAW_REPO} excalidraw \
  && cd excalidraw \

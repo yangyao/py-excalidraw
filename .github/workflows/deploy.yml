@@ -29,6 +29,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Validate origins
+        run: |
+          if [ -z "${{ secrets.PUBLIC_ORIGIN }}" ]; then
+            echo "PUBLIC_ORIGIN secret is required (Settings → Secrets and variables → Actions)." >&2
+            exit 1
+          fi
+
       - name: Build Docker image
         run: |
           # Build amd64 image so it runs on typical x86 servers
@@ -36,7 +43,8 @@ jobs:
             --platform linux/amd64 \
             --build-arg EXCALIDRAW_REPO="${{ inputs.excalidraw_repo || 'https://github.com/excalidraw/excalidraw.git' }}" \
             --build-arg EXCALIDRAW_REF="${{ inputs.excalidraw_ref || 'master' }}" \
-            --build-arg ENV_FILE=".env.excalidraw.production" \
+            --build-arg PUBLIC_ORIGIN="${{ secrets.PUBLIC_ORIGIN }}" \
+            --build-arg WS_ORIGIN="${{ secrets.WS_ORIGIN || secrets.PUBLIC_ORIGIN }}" \
             -t "$IMAGE_NAME" \
             --load \
             .

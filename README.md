@@ -163,9 +163,42 @@ Stops the service and optionally removes images and data.
 - `EXCALIDRAW_REPO`: upstream repository URL
 - `EXCALIDRAW_REF`: branch/tag/commit hash
 
+### Frontend endpoints without editing source
+
+To avoid hardcoding your domain in the repo, the image build can generate the Excalidraw `.env` automatically when you pass `PUBLIC_ORIGIN` (and optionally `WS_ORIGIN`). This removes the need to edit `.env.excalidraw.production`.
+
+- `PUBLIC_ORIGIN` (optional): scheme and host where users access the app, e.g. `https://your-domain.example`.
+- `WS_ORIGIN` (optional): WebSocket origin; defaults to `PUBLIC_ORIGIN` if omitted.
+
+Example (docker buildx):
+
+```
+docker buildx build \
+  --platform linux/amd64 \
+  --build-arg PUBLIC_ORIGIN="https://chart.example.com" \
+  -t excalidraw-fastapi:latest \
+  --load .
+```
+
+Example (docker compose):
+
+```
+docker compose build \
+  --build-arg PUBLIC_ORIGIN="https://chart.example.com"
+docker compose up -d
+```
+
+What gets configured at build time:
+
+- `VITE_APP_BACKEND_V2_GET_URL` → `${PUBLIC_ORIGIN}/api/v2/`
+- `VITE_APP_BACKEND_V2_POST_URL` → `${PUBLIC_ORIGIN}/api/v2/post/`
+- `VITE_APP_PLUS_LP` and `VITE_APP_PLUS_APP` → `${PUBLIC_ORIGIN}`
+- `VITE_APP_AI_BACKEND` → `${PUBLIC_ORIGIN}/ai/`
+- `VITE_APP_WS_SERVER_URL` → `${WS_ORIGIN:-PUBLIC_ORIGIN}`
+
 ## Notes
 
 - Frontend is automatically cloned and built inside the container
 - Static site is served from `FRONTEND_DIR` with SPA fallback to `index.html`
 - Admin endpoints are unauthenticated by default; protect them behind a reverse proxy or network ACL in production
-- Frontend environment variables can be adjusted by editing the `.env.excalidraw` file
+- Frontend endpoints are configured at build time via `PUBLIC_ORIGIN`/`WS_ORIGIN` build args (no local source edits needed)
