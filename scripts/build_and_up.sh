@@ -73,4 +73,3 @@ if [[ "$DETACH" -eq 1 ]]; then
 else
   "${DCMD[@]}" up
 fi
-

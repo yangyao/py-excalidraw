@@ -3,11 +3,12 @@ FROM node:18 AS frontend-build
 
 ARG EXCALIDRAW_REPO=https://github.com/excalidraw/excalidraw.git
 ARG EXCALIDRAW_REF=master
+ARG ENV_FILE=.env.excalidraw.local
 
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 
-COPY .env.excalidraw /src/.env.excalidraw
+COPY ${ENV_FILE} /src/.env.excalidraw
 
 RUN git clone --depth 1 ${EXCALIDRAW_REPO} excalidraw \
  && cd excalidraw \

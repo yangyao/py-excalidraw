@@ -7,6 +7,7 @@ services:
       args:
         EXCALIDRAW_REPO: ${EXCALIDRAW_REPO:-https://github.com/excalidraw/excalidraw.git}
         EXCALIDRAW_REF: ${EXCALIDRAW_REF:-master}
+        ENV_FILE: ${ENV_FILE:-.env.excalidraw.local}
     image: excalidraw-fastapi:latest
     container_name: excalidraw
     environment:

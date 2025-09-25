@@ -1,0 +1,97 @@
+name: Deploy py-excalidraw
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      excalidraw_repo:
+        description: Excalidraw repo URL used at build time
+        required: false
+        default: https://github.com/excalidraw/excalidraw.git
+      excalidraw_ref:
+        description: Excalidraw git ref (branch/tag/commit)
+        required: false
+        default: master
+
+env:
+  IMAGE_NAME: excalidraw-fastapi:latest
+  REMOTE_DIR: /opt/py-excalidraw
+  DEPLOY_TMP: /tmp/py-excalidraw-deploy
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --build-arg EXCALIDRAW_REPO="${{ inputs.excalidraw_repo || 'https://github.com/excalidraw/excalidraw.git' }}" \
+            --build-arg EXCALIDRAW_REF="${{ inputs.excalidraw_ref || 'master' }}" \
+            --build-arg ENV_FILE=".env.excalidraw.production" \
+            -t "$IMAGE_NAME" .
+
+      - name: Save Docker image
+        run: docker save "$IMAGE_NAME" | gzip > image.tar.gz
+
+      - name: Prepare upload bundle
+        run: |
+          mkdir -p upload
+          cp docker-compose.yml upload/
+          mv image.tar.gz upload/
+
+      - name: Upload files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "upload/*"
+          target: "${{ env.DEPLOY_TMP }}/"
+
+      - name: Deploy on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            REMOTE_DIR="${{ env.REMOTE_DIR }}"
+            DEPLOY_TMP="${{ env.DEPLOY_TMP }}"
+
+            sudo mkdir -p "$REMOTE_DIR" "$REMOTE_DIR/data"
+            sudo chown -R "$USER":"$USER" "$REMOTE_DIR"
+
+            # Update docker-compose.yml
+            if [ -f "$DEPLOY_TMP/docker-compose.yml" ]; then
+              mv -f "$DEPLOY_TMP/docker-compose.yml" "$REMOTE_DIR/docker-compose.yml"
+            fi
+
+            # Load Docker image
+            if [ -f "$DEPLOY_TMP/image.tar.gz" ]; then
+              gunzip -c "$DEPLOY_TMP/image.tar.gz" | docker load
+            fi
+
+            # Pick docker compose command
+            if command -v docker-compose >/dev/null 2>&1; then
+              DC="docker-compose"
+            elif docker compose version >/dev/null 2>&1; then
+              DC="docker compose"
+            else
+              echo "docker-compose or docker compose is required on server" >&2
+              exit 1
+            fi
+
+            cd "$REMOTE_DIR"
+            $DC up -d
+
+      - name: Deployment status
+        if: always()
+        run: echo "Deployment ${{ job.status }}"
