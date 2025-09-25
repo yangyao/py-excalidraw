@@ -16,7 +16,7 @@ services:
       - FRONTEND_DIR=${FRONTEND_DIR:-/app/frontend/build}
       - HOST=0.0.0.0
       - PORT=8888
-      - APP_PUBLIC_ORIGIN=${APP_PUBLIC_ORIGIN:-127.0.0.1:8888}
+      - PUBLIC_ORIGIN=${PUBLIC_ORIGIN:-http://127.0.0.1:8888}
     ports:
       - "8888:8888"
     volumes:

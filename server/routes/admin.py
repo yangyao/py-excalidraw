@@ -115,6 +115,6 @@ PAGE = """
 
 @router.get("/admin", response_class=HTMLResponse)
 def admin_page():
-    origin = settings.APP_PUBLIC_ORIGIN or ""
+    origin = settings.PUBLIC_ORIGIN or ""
     injected = PAGE.replace("__APP_ORIGIN__", f"{origin!r}")
     return HTMLResponse(injected)

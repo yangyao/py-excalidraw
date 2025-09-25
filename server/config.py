@@ -14,7 +14,7 @@ class Settings:
 
     # When set, admin "Open" links will use this origin
     # e.g., https://chart.example.com (no trailing slash)
-    APP_PUBLIC_ORIGIN: str | None = os.getenv("APP_PUBLIC_ORIGIN")
+    PUBLIC_ORIGIN: str | None = os.getenv("PUBLIC_ORIGIN")
 
 
 settings = Settings()
