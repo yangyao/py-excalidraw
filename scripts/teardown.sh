@@ -9,7 +9,7 @@ usage() {
   cat <<EOF
 Usage: $0 [--remove-image|-i] [--remove-data]
 
-Stops the docker-compose service and optionally removes the built image and local data directory.
+Stops the running container and optionally removes the built image and local data directory.
 
 Options:
   -i, --remove-image   Remove the built image (excalidraw-fastapi:latest)
@@ -27,17 +27,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if command -v docker-compose >/dev/null 2>&1; then
-  DCMD=(docker-compose)
-elif docker compose version >/dev/null 2>&1; then
-  DCMD=(docker compose)
-else
-  echo "docker-compose or docker compose is required" >&2
-  exit 1
-fi
-
-echo "[i] Stopping and removing containers, networks"
-"${DCMD[@]}" down
+echo "[i] Stopping container 'excalidraw' (if running)"
+docker rm -f excalidraw >/dev/null 2>&1 || true
 
 if [[ "$REMOVE_IMAGE" -eq 1 ]]; then
   echo "[i] Removing image excalidraw-fastapi:latest"
@@ -50,4 +41,3 @@ if [[ "$REMOVE_DATA" -eq 1 ]]; then
 fi
 
 echo "[i] Teardown complete."
-

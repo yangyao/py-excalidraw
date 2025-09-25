@@ -45,19 +45,43 @@ Stop the service:
 ./scripts/teardown.sh --remove-image --remove-data
 ```
 
-### Option 2: Direct Docker Compose
+### Option 2: Plain Docker
+
+Build the image with your public origin baked into the frontend, then run the container:
 
 ```bash
-docker-compose up --build
-```
+# Build (amd64), set your public origin for the frontend
+docker buildx build \
+  --platform linux/amd64 \
+  --build-arg PUBLIC_ORIGIN="http://127.0.0.1:8888" \
+  -t excalidraw-fastapi:latest \
+  --load .
 
-Visit http://127.0.0.1:8888
+# Run (filesystem storage persisted to ./data)
+mkdir -p ./data
+docker run -d \
+  --name excalidraw \
+  --restart=always \
+  -p 8888:8888 \
+  -e STORAGE_TYPE=filesystem \
+  -e LOCAL_STORAGE_PATH=/app/data \
+  -e PUBLIC_ORIGIN="http://127.0.0.1:8888" \
+  -v $(pwd)/data:/app/data \
+  excalidraw-fastapi:latest
+
+echo "Open http://127.0.0.1:8888"
+```
 
 ## Admin Interface
 
 The service includes a web-based admin interface for managing saved canvases:
 
 **Access:** http://127.0.0.1:8888/admin
+
+Admin links origin
+- The admin page's “Open” buttons point to the main app origin.
+- Configure this via runtime env `PUBLIC_ORIGIN` (e.g., `https://chart.example.com`).
+- In Docker: set `PUBLIC_ORIGIN` via `-e PUBLIC_ORIGIN=...` when running the container.
 
 ### Features
 
@@ -98,11 +122,10 @@ The admin interface is unauthenticated by default. For production use, consider 
 
 ## Environment Variables
 
-Configure the following environment variables in `docker-compose.yml`:
-
+At runtime (container env):
 - `STORAGE_TYPE`: `memory` or `filesystem`
 - `LOCAL_STORAGE_PATH`: data path for filesystem storage (default `/app/data`)
-- `FRONTEND_DIR`: static assets path (default `/app/frontend/build`)
+- `PUBLIC_ORIGIN`: public origin used by the admin page to open documents on the main site
 
 ## Scripts
 
@@ -110,7 +133,7 @@ The `scripts/` directory contains helper scripts for easier service management:
 
 ### `build_and_up.sh`
 
-Builds the Docker image and starts the service with docker-compose.
+Builds the Docker image and starts the service with plain Docker.
 
 **Usage:**
 ```bash
@@ -162,6 +185,8 @@ Stops the service and optionally removes images and data.
 
 - `EXCALIDRAW_REPO`: upstream repository URL
 - `EXCALIDRAW_REF`: branch/tag/commit hash
+- `PUBLIC_ORIGIN` (build arg): used to generate frontend endpoints baked into static assets
+- `WS_ORIGIN` (build arg): websocket origin; defaults to `PUBLIC_ORIGIN` if omitted
 
 ### Frontend endpoints without editing source
 
@@ -180,13 +205,7 @@ docker buildx build \
   --load .
 ```
 
-Example (docker compose):
-
-```
-docker compose build \
-  --build-arg PUBLIC_ORIGIN="https://chart.example.com"
-docker compose up -d
-```
+Example (plain Docker run shown above; no compose required)
 
 What gets configured at build time:
 
@@ -202,3 +221,93 @@ What gets configured at build time:
 - Static site is served from `FRONTEND_DIR` with SPA fallback to `index.html`
 - Admin endpoints are unauthenticated by default; protect them behind a reverse proxy or network ACL in production
 - Frontend endpoints are configured at build time via `PUBLIC_ORIGIN`/`WS_ORIGIN` build args (no local source edits needed)
+- Admin page uses runtime env `PUBLIC_ORIGIN` for cross-domain “Open” links (e.g., admin subdomain → app domain)
+
+## Deploy via GitHub Actions
+
+This repo includes a workflow `.github/workflows/deploy.yml` that builds an image and deploys it to a remote Linux server via SSH.
+
+Prerequisites on the server
+- Docker Engine installed, with the target user able to run `docker` (in the `docker` group).
+- Open TCP ports as needed (e.g., 8888 for direct access; or run Caddy in front).
+
+Repository secrets (required)
+- `SERVER_HOST`: server IP or hostname
+- `SERVER_USER`: SSH username
+- `SERVER_SSH_KEY`: private key content for the SSH user
+- `PUBLIC_ORIGIN`: the public origin for the app, e.g. `https://chart.example.com`
+- Optional `WS_ORIGIN`: WebSocket origin; defaults to `PUBLIC_ORIGIN` if not set
+
+How it works
+- Builds an amd64 image with build args `PUBLIC_ORIGIN` and `WS_ORIGIN` baked into the frontend.
+- Saves the image to a tarball, uploads `image.tar.gz` to the server.
+- On the server:
+  - Stages files into `${REMOTE_DIR}` (default `/opt/py-excalidraw`).
+  - Loads the image via `docker load`.
+  - Restarts a single container `excalidraw` with `docker run -d` (port 8888, persistent volume `${REMOTE_DIR}/data:/app/data`, env `PUBLIC_ORIGIN`).
+
+Usage
+- Automatic: push to `main` triggers the workflow.
+- Manual: use “Run workflow” in Actions; you may optionally override `excalidraw_repo` and `excalidraw_ref`.
+
+Troubleshooting
+- Platform mismatch: the workflow builds `linux/amd64` and loads locally to avoid arm64/amd64 issues.
+- Permissions: if Docker requires sudo on your server, add the SSH user to the `docker` group or adapt the workflow to prefix `sudo` where needed.
+
+## Caddy Reverse Proxy (Dual Domains)
+
+Goal
+- Serve the app at `chart.example.com`.
+- Serve the admin at `chart-admin.example.com`, with `/` rewritten to `/admin`.
+
+Host (bare‑metal) Caddy
+- Caddyfile:
+
+```
+chart.example.com {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:8888 {
+    header_up Host {host}
+    header_up X-Forwarded-Proto {scheme}
+  }
+}
+
+chart-admin.example.com {
+  encode zstd gzip
+  @root path /
+  rewrite @root /admin
+  reverse_proxy 127.0.0.1:8888 {
+    header_up Host {host}
+    header_up X-Forwarded-Proto {scheme}
+  }
+}
+```
+
+- DNS: point both domains to the server IP (A/AAAA records).
+- Reload: `caddy reload --config /etc/caddy/Caddyfile`.
+
+Dockerized Caddy
+- Example compose service:
+
+```
+services:
+  caddy:
+    image: caddy:2
+    container_name: caddy
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [excalidraw]
+
+volumes:
+  caddy_data:
+  caddy_config:
+```
+
+- In the Caddyfile, change upstream to `excalidraw:8888` when proxying within the compose network.
+
+Notes
+- Caddy will manage TLS automatically via Let's Encrypt; ensure ports 80/443 are open and DNS is correct.
+- Using a separate admin domain forces full-page navigation to `/admin`, avoiding SPA/Service Worker interception on the main app origin.

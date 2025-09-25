@@ -55,7 +55,6 @@ jobs:
       - name: Prepare upload bundle
         run: |
           mkdir -p upload
-          cp docker-compose.yml upload/
           mv image.tar.gz upload/
 
       - name: Upload files to server
@@ -67,7 +66,7 @@ jobs:
           source: "upload/*"
           target: "${{ env.DEPLOY_TMP }}/"
 
-      - name: Deploy on server
+      - name: Deploy on server (Docker only)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -91,15 +90,6 @@ jobs:
               ls -la "$DEPLOY_TMP" || true
             fi
 
-            # Update docker-compose.yml
-            if [ -f "$DEPLOY_TMP/docker-compose.yml" ]; then
-              mv -f "$DEPLOY_TMP/docker-compose.yml" "$REMOTE_DIR/docker-compose.yml"
-            elif [ -f "$DEPLOY_TMP/upload/docker-compose.yml" ]; then
-              mv -f "$DEPLOY_TMP/upload/docker-compose.yml" "$REMOTE_DIR/docker-compose.yml"
-            else
-              echo "docker-compose.yml not found in $DEPLOY_TMP" >&2
-            fi
-
             # Load Docker image
             if [ -f "$DEPLOY_TMP/image.tar.gz" ]; then
               gunzip -c "$DEPLOY_TMP/image.tar.gz" | docker load
@@ -108,32 +98,28 @@ jobs:
             else
               echo "image.tar.gz not found in $DEPLOY_TMP; proceeding if image already exists" >&2
             fi
+            
+            # Restart container using the loaded image
+            CONTAINER_NAME="excalidraw"
+            IMAGE_NAME="${{ env.IMAGE_NAME }}"
+            echo "Stopping old container (if any)..."
+            docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
-            # Pick docker compose command
-            if command -v docker-compose >/dev/null 2>&1; then
-              DC="docker-compose"
-            elif docker compose version >/dev/null 2>&1; then
-              DC="docker compose"
-            else
-              echo "docker-compose or docker compose is required on server" >&2
-              exit 1
-            fi
+            echo "Starting container $CONTAINER_NAME from $IMAGE_NAME..."
+            docker run -d \
+              --name "$CONTAINER_NAME" \
+              --restart=always \
+              -p 8888:8888 \
+              -e STORAGE_TYPE=filesystem \
+              -e LOCAL_STORAGE_PATH=/app/data \
+              -e PUBLIC_ORIGIN='${{ secrets.PUBLIC_ORIGIN }}' \
+              -v "$REMOTE_DIR/data:/app/data" \
+              "$IMAGE_NAME"
 
-            cd "$REMOTE_DIR"
-            # Export runtime env vars for compose
-            export PUBLIC_ORIGIN='${{ secrets.PUBLIC_ORIGIN }}'
-            # Quick sanity check for compose file presence
-            ls -la "$REMOTE_DIR"
-            if [ ! -f "$REMOTE_DIR/docker-compose.yml" ]; then
-              echo "Compose file missing at $REMOTE_DIR/docker-compose.yml" >&2
-              exit 1
-            fi
-            # Use explicit compose file path and avoid rebuilding on server
-            $DC -f "$REMOTE_DIR/docker-compose.yml" up -d --no-build
-            echo "Compose services status:"
-            $DC -f "$REMOTE_DIR/docker-compose.yml" ps || true
             echo "Docker containers (including exited):"
             docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' | sed -n '1,50p' || true
+            echo "Recent logs:"
+            docker logs --tail 80 "$CONTAINER_NAME" || true
 
       - name: Deployment status
         if: always()
