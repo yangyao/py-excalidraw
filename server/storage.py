@@ -114,6 +114,9 @@ class FilesystemStore:
                 fp = self._path(name)
                 if not os.path.isfile(fp):
                     continue
+                # Skip sidecar metadata files
+                if name.endswith(".meta.json"):
+                    continue
                 st = os.stat(fp)
                 info = DocumentInfo(
                     id=name,

@@ -1,0 +1,31 @@
+# Caddyfile for py-excalidraw
+#
+# chart.phpman.top          → reverse proxy to backend root
+# chart-admin.phpman.top    → rewrite / to /admin, then reverse proxy to backend
+#
+# If Caddy runs on the host and your backend is exposed on localhost:8888
+# (e.g., via `docker compose` mapping 8888:8888), keep 127.0.0.1:8888.
+# If Caddy runs in Docker on the same network as the backend container,
+# change the upstream to `excalidraw:8888`.
+
+chart.phpman.top {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:8888 {
+    # Preserve original host and scheme for the backend
+    header_up Host {host}
+    header_up X-Forwarded-Proto {scheme}
+  }
+}
+
+chart-admin.phpman.top {
+  encode zstd gzip
+
+  # Only rewrite the root path to /admin so direct visits land on admin UI
+  @root path /
+  rewrite @root /admin
+
+  reverse_proxy 127.0.0.1:8888 {
+    header_up Host {host}
+    header_up X-Forwarded-Proto {scheme}
+  }
+}
