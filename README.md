@@ -10,7 +10,7 @@ All‑in‑one Excalidraw deployment with a Python FastAPI backend. Ships a buil
 - APIs
 - Build & Deploy (GitHub Actions)
 - Reverse Proxy (Caddy)
-- Maintenance (Scripts)
+- Maintenance (Makefile)
 - Troubleshooting
 - Notes
 
@@ -23,20 +23,18 @@ All‑in‑one Excalidraw deployment with a Python FastAPI backend. Ships a buil
 
 ## Quick Start
 
-Option A — Makefile (recommended)
-
 ```bash
 # Build
-make build PUBLIC_ORIGIN="http://127.0.0.1:8888"
+make build
 
 # Start (detached)
-make up PUBLIC_ORIGIN="http://127.0.0.1:8888"
+make up
 
 # Specific upstream version
-make build EXCALIDRAW_REF=v0.17.3 PUBLIC_ORIGIN="http://127.0.0.1:8888"
+make build EXCALIDRAW_REF=v0.17.3
 
 # Foreground
-make up-fg PUBLIC_ORIGIN="http://127.0.0.1:8888"
+make up-fg
 
 # Stop / cleanup
 make down
