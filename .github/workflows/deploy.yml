@@ -120,6 +120,8 @@ jobs:
             fi
 
             cd "$REMOTE_DIR"
+            # Export runtime env vars for compose
+            export APP_PUBLIC_ORIGIN='${{ secrets.PUBLIC_ORIGIN }}'
             # Quick sanity check for compose file presence
             ls -la "$REMOTE_DIR"
             if [ ! -f "$REMOTE_DIR/docker-compose.yml" ]; then

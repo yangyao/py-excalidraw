@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
+from ..config import settings
 
 
 router = APIRouter()
@@ -26,6 +27,7 @@ PAGE = """
     input[type="text"] { padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; }
   </style>
   <script>
+    const APP_ORIGIN = __APP_ORIGIN__;
     async function fetchList() {
       const res = await fetch('/api/v2/admin/documents');
       if (!res.ok) throw new Error('Failed to fetch list');
@@ -80,7 +82,7 @@ PAGE = """
             <td class="id">${it.id}</td>
             <td>${(it.size || 0)} bytes<br/><span class="muted">${toLocal(it.createdAt)}</span></td>
             <td>
-              <a href="/api/v2/${it.id}" target="_blank"><button>Open</button></a>
+              <a href="${APP_ORIGIN ? APP_ORIGIN : ''}/api/v2/${it.id}" target="_blank"><button>Open</button></a>
               <button onclick="remove('${it.id}')">Delete</button>
             </td>
           </tr>
@@ -113,5 +115,6 @@ PAGE = """
 
 @router.get("/admin", response_class=HTMLResponse)
 def admin_page():
-    return HTMLResponse(PAGE)
-
+    origin = settings.APP_PUBLIC_ORIGIN or ""
+    injected = PAGE.replace("__APP_ORIGIN__", f"{origin!r}")
+    return HTMLResponse(injected)

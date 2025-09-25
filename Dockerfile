@@ -100,9 +100,10 @@ COPY --from=frontend-build /src/frontend-build /app/frontend/build
 
 ENV HOST=0.0.0.0 \
     PORT=8888 \
-    STORAGE_TYPE=memory \
+    STORAGE_TYPE=filesystem \
     LOCAL_STORAGE_PATH=/app/data \
-    FRONTEND_DIR=/app/frontend/build
+    FRONTEND_DIR=/app/frontend/build \
+    APP_PUBLIC_ORIGIN=127.0.0.1:8888
 
 EXPOSE 8888
 

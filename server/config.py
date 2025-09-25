@@ -12,6 +12,9 @@ class Settings:
 
     FRONTEND_DIR: str = os.getenv("FRONTEND_DIR", "./frontend/build")
 
+    # When set, admin "Open" links will use this origin
+    # e.g., https://chart.example.com (no trailing slash)
+    APP_PUBLIC_ORIGIN: str | None = os.getenv("APP_PUBLIC_ORIGIN")
+
 
 settings = Settings()
-
