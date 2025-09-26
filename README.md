@@ -4,6 +4,7 @@ All‑in‑one Excalidraw deployment with a Python FastAPI backend. Ships a buil
 
 ## Table of Contents
 - Overview
+- Screenshots
 - Quick Start
 - Configuration
 - Admin UI
@@ -20,6 +21,11 @@ All‑in‑one Excalidraw deployment with a Python FastAPI backend. Ships a buil
 - Simple web admin to list/open/delete documents and set names (stores share keys server‑side so items are directly openable).
 - Minimal Firebase proxy endpoints used by Excalidraw.
 - Storage backends: memory (default) or filesystem.
+
+## Screenshots
+![Save to Admin](docs/screenshots/save-to-admin.png)
+![Add Canvas](docs/screenshots/admin-add-canvas.png)
+![Canvas List](docs/screenshots/admin-canvas-list.png)
 
 ## Quick Start
 
@@ -70,6 +76,16 @@ Behavior
 Security
 - The admin page is unauthenticated by default. Protect it via reverse proxy auth, IP allowlist, VPN, etc., for production.
 - Storing share keys on the server makes canvases openable from Admin and weakens pure end‑to‑end secrecy; restrict Admin access.
+
+### Save‑to‑Admin Injection
+- The backend injects a small helper script into the Excalidraw frontend (`index.html`) at response time.
+- Location: `server/routes/ui.py` reads `server/inject/save-to-admin.js` and inlines it before `</head>`.
+- No extra network fetch: the JS is injected inline; if reading fails, injection is skipped (frontend behaves normally).
+- Behavior: watches the Share dialog, places a “Save to Admin” button next to “Copy link”.
+  - On click, it reads the share link (from the readonly input, or temporarily triggers Copy to capture it),
+    opens a lightweight name modal, and POSTs `{ name, key }` to `POST /api/v2/admin/documents/{id}/meta`.
+- Scope: only affects the frontend app pages; `/admin`, `/api`, `/v1`, `/ping` are not modified.
+- Disable injection: remove or empty `server/inject/save-to-admin.js` (the server will skip injection if the file can’t be read).
 
 ## APIs
 
@@ -207,19 +223,10 @@ Variables (override via CLI or env)
 - Admin page uses runtime `PUBLIC_ORIGIN` to open docs on the main app origin.
 
 ## Screenshots
-- Place images under `docs/screenshots/` with exact filenames:
-  - `docs/screenshots/save-to-admin.png` — Excalidraw Share dialog with “Save to Admin” button
-  - `docs/screenshots/admin-add-canvas.png` — Admin “Add Canvas” modal (Name + Share Link)
-  - `docs/screenshots/admin-canvas-list.png` — Admin list view with Open/Copy Link/Delete
-
-Embed in this README (example):
-
-```
 ![Save to Admin](docs/screenshots/save-to-admin.png)
 ![Add Canvas](docs/screenshots/admin-add-canvas.png)
 ![Canvas List](docs/screenshots/admin-canvas-list.png)
-```
 
-Tips
-- Prefer PNG around ~2x resolution for clarity; GitHub will scale it.
-- Redact any sensitive IDs/keys before committing screenshots.
+Notes for updating screenshots
+- Replace files under `docs/screenshots/` with the same filenames.
+- Prefer PNG around ~2x resolution for clarity; redact sensitive IDs/keys.
