@@ -65,6 +65,7 @@ Access
 Behavior
 - Admin lists only canvases that have a stored share key (i.e., can be opened).
 - Use "Add Canvas" to paste a share link and optional name; Admin stores the key server-side so Open/Copy Link work directly on `PUBLIC_ORIGIN`.
+- Frontend injection adds a "Save to Admin" button next to Excalidraw's Share/Copy Link UI, so you can save the current share link to Admin without leaving the app.
 
 Security
 - The admin page is unauthenticated by default. Protect it via reverse proxy auth, IP allowlist, VPN, etc., for production.

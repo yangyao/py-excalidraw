@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 import os
 
 
@@ -8,6 +8,7 @@ def mount_static(app: FastAPI, static_dir: str):
     static_dir = static_dir or "./frontend/build"
     if os.path.isdir(static_dir):
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+        # (No external asset mount; helper JS is injected inline when serving index.html.)
 
         # Fallback for client-side routing to index.html
         @app.middleware("http")
@@ -21,5 +22,28 @@ def mount_static(app: FastAPI, static_dir: str):
                 return await call_next(request)
             index_path = os.path.join(static_dir, "index.html")
             if os.path.exists(index_path):
+                try:
+                    with open(index_path, "r", encoding="utf-8") as f:
+                        html = f.read()
+                except Exception:
+                    return FileResponse(index_path)
+
+                # Prefer inline inject to avoid extra network fetch; if reading fails, skip injection.
+                try:
+                    base_dir = os.path.dirname(os.path.dirname(__file__))  # server/
+                    inject_dir = os.path.join(base_dir, "inject")
+                    js_path = os.path.join(inject_dir, "save-to-admin.js")
+                    with open(js_path, "r", encoding="utf-8") as jf:
+                        js_code = jf.read()
+                    tag = "<script>\n" + js_code + "\n</script>"
+                except Exception:
+                    tag = None
+
+                try:
+                    if tag and "</head>" in html:
+                        html = html.replace("</head>", tag + "</head>")
+                        return HTMLResponse(html)
+                except Exception:
+                    pass
                 return FileResponse(index_path)
             return await call_next(request)
