@@ -32,6 +32,96 @@
     });
   }
 
+  function ensureModalStyles() {
+    if (document.getElementById('adm-modal-style')) return;
+    var css = '\n'
+      + '.adm-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:2147483000;}\n'
+      + '.adm-modal{background:#fff;width:420px;max-width:92vw;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,0.25);padding:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}\n'
+      + '.adm-modal h3{margin:0 0 12px;font-size:16px;}\n'
+      + '.adm-field{display:flex;flex-direction:column;gap:6px;margin:10px 0;}\n'
+      + '.adm-field label{font-size:12px;color:#555;}\n'
+      + '.adm-field input{padding:8px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;}\n'
+      + '.adm-actions{display:flex;gap:8px;margin-top:12px;justify-content:flex-end;}\n'
+      + '.adm-btn{padding:8px 12px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;}\n'
+      + '.adm-btn.primary{background:#3b82f6;border-color:#3b82f6;color:#fff;}\n'
+      + '.adm-error{color:#c00;font-size:12px;min-height:16px;margin-top:4px;}\n';
+    var style = document.createElement('style');
+    style.id = 'adm-modal-style';
+    style.type = 'text/css';
+    style.appendChild(document.createTextNode(css));
+    document.head.appendChild(style);
+  }
+
+  function openNameModal(defaultName, onSubmit) {
+    ensureModalStyles();
+    // overlay
+    var overlay = document.createElement('div');
+    overlay.className = 'adm-modal-overlay';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    // modal
+    var modal = document.createElement('div');
+    modal.className = 'adm-modal';
+    var title = document.createElement('h3');
+    title.textContent = 'Save to Admin';
+    var field = document.createElement('div');
+    field.className = 'adm-field';
+    var label = document.createElement('label');
+    label.textContent = 'Name (optional)';
+    label.setAttribute('for', 'adm-name-input');
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'adm-name-input';
+    input.placeholder = '(optional)';
+    input.value = defaultName || '';
+    var error = document.createElement('div');
+    error.className = 'adm-error';
+    var actions = document.createElement('div');
+    actions.className = 'adm-actions';
+    var btnSave = document.createElement('button');
+    btnSave.className = 'adm-btn primary';
+    btnSave.textContent = 'Save';
+    var btnCancel = document.createElement('button');
+    btnCancel.className = 'adm-btn';
+    btnCancel.textContent = 'Cancel';
+
+    actions.appendChild(btnSave);
+    actions.appendChild(btnCancel);
+    field.appendChild(label);
+    field.appendChild(input);
+    modal.appendChild(title);
+    modal.appendChild(field);
+    modal.appendChild(error);
+    modal.appendChild(actions);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    function close() {
+      try { document.body.removeChild(overlay); } catch (e) {}
+    }
+
+    function submit() {
+      if (btnSave.disabled) return;
+      btnSave.disabled = true;
+      error.textContent = '';
+      Promise.resolve(onSubmit(input.value.trim() || null)).then(function (ok) {
+        if (ok === false) {
+          error.textContent = '保存失败';
+          btnSave.disabled = false;
+        } else {
+          close();
+        }
+      }).catch(function () {
+        error.textContent = '请求失败';
+        btnSave.disabled = false;
+      });
+    }
+
+    btnSave.addEventListener('click', submit);
+    btnCancel.addEventListener('click', close);
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); if (e.key === 'Escape') close(); });
+    setTimeout(function () { try { input.focus(); input.select(); } catch (e) {} }, 0);
+  }
+
   function findCopyButton(container) {
     // Prefer explicit aria-label
     var btn = container.querySelector('button[aria-label="Copy link"]');
@@ -96,16 +186,13 @@
       }
       var parsed = parseShareLink(link || '');
       if (!parsed) { alert('未找到分享链接，请先生成 Share Link'); return; }
-      var name = prompt('输入名称（可选）') || null;
-      try {
-        var r = await postMeta(parsed.id, parsed.key, name);
-        if (!r.ok) {
-          var msg = await r.text();
-          alert('保存失败：' + msg);
-        } else {
-          alert('已保存到 Admin');
-        }
-      } catch (e) { alert('请求失败'); }
+      openNameModal('', async function (name) {
+        try {
+          var r = await postMeta(parsed.id, parsed.key, name);
+          if (!r.ok) return false;
+          return true;
+        } catch (e) { return false; }
+      });
     });
     // Insert after copy button
     copyBtn.parentElement.insertBefore(btn, copyBtn.nextSibling);

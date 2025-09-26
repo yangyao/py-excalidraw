@@ -205,3 +205,21 @@ Variables (override via CLI or env)
 - Admin endpoints are unauthenticated; protect in production.
 - Frontend URLs are set at build time via `PUBLIC_ORIGIN`/`WS_ORIGIN`.
 - Admin page uses runtime `PUBLIC_ORIGIN` to open docs on the main app origin.
+
+## Screenshots
+- Place images under `docs/screenshots/` with exact filenames:
+  - `docs/screenshots/save-to-admin.png` — Excalidraw Share dialog with “Save to Admin” button
+  - `docs/screenshots/admin-add-canvas.png` — Admin “Add Canvas” modal (Name + Share Link)
+  - `docs/screenshots/admin-canvas-list.png` — Admin list view with Open/Copy Link/Delete
+
+Embed in this README (example):
+
+```
+![Save to Admin](docs/screenshots/save-to-admin.png)
+![Add Canvas](docs/screenshots/admin-add-canvas.png)
+![Canvas List](docs/screenshots/admin-canvas-list.png)
+```
+
+Tips
+- Prefer PNG around ~2x resolution for clarity; GitHub will scale it.
+- Redact any sensitive IDs/keys before committing screenshots.
