@@ -17,7 +17,7 @@ All‑in‑one Excalidraw deployment with a Python FastAPI backend. Ships a buil
 ## Overview
 - Serves the Excalidraw frontend (built inside the image).
 - Save/load binary protocol compatible with Excalidraw.
-- Simple web admin to list/open/delete documents and set names.
+- Simple web admin to list/open/delete documents and set names (stores share keys server‑side so items are directly openable).
 - Minimal Firebase proxy endpoints used by Excalidraw.
 - Storage backends: memory (default) or filesystem.
 
@@ -63,10 +63,12 @@ Access
 - `http://127.0.0.1:8888/admin`
 
 Behavior
-- The admin page’s “Open” buttons point to `PUBLIC_ORIGIN`, so if you serve the app at `chart.example.com` and admin at `chart-admin.example.com`, clicking “Open” will open on the main site.
+- Admin lists only canvases that have a stored share key (i.e., can be opened).
+- Use "Add Canvas" to paste a share link and optional name; Admin stores the key server-side so Open/Copy Link work directly on `PUBLIC_ORIGIN`.
 
 Security
 - The admin page is unauthenticated by default. Protect it via reverse proxy auth, IP allowlist, VPN, etc., for production.
+- Storing share keys on the server makes canvases openable from Admin and weakens pure end‑to‑end secrecy; restrict Admin access.
 
 ## APIs
 
@@ -77,8 +79,9 @@ Document management
 
 Admin
 - `GET /admin` — web interface
-- `GET /api/v2/admin/documents` — list: id, size, createdAt, name
+- `GET /api/v2/admin/documents` — list only openable items: id, size, createdAt, name, shareLink
 - `POST /api/v2/admin/documents/{id}/name` — set name
+- `POST /api/v2/admin/documents/{id}/meta` — set name and share key (parsed from share link)
 
 Firebase compatibility
 - `POST /v1/projects/{project}/databases/{db}/documents:commit`

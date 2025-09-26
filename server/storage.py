@@ -27,6 +27,13 @@ class DocumentStore(Protocol):
     def get_name(self, id_: str) -> Optional[str]:
         ...
 
+    # Optional: store share key (admin convenience)
+    def set_key(self, id_: str, key: Optional[str]) -> bool:
+        ...
+
+    def get_key(self, id_: str) -> Optional[str]:
+        ...
+
 
 @dataclass
 class DocumentInfo:
@@ -41,6 +48,7 @@ class MemoryStore:
         self._data: Dict[str, bytes] = {}
         self._meta: Dict[str, datetime] = {}
         self._names: Dict[str, str] = {}
+        self._keys: Dict[str, str] = {}
 
     def find_id(self, id_: str) -> Optional[bytes]:
         return self._data.get(id_)
@@ -64,6 +72,7 @@ class MemoryStore:
         self._data.pop(id_, None)
         self._meta.pop(id_, None)
         self._names.pop(id_, None)
+        self._keys.pop(id_, None)
         return existed
 
     def set_name(self, id_: str, name: Optional[str]) -> bool:
@@ -77,6 +86,18 @@ class MemoryStore:
 
     def get_name(self, id_: str) -> Optional[str]:
         return self._names.get(id_)
+
+    def set_key(self, id_: str, key: Optional[str]) -> bool:
+        if id_ not in self._data:
+            return False
+        if key is None or key == "":
+            self._keys.pop(id_, None)
+        else:
+            self._keys[id_] = key
+        return True
+
+    def get_key(self, id_: str) -> Optional[str]:
+        return self._keys.get(id_)
 
 
 @dataclass
@@ -157,17 +178,27 @@ class FilesystemStore:
         if not (os.path.exists(p) and os.path.isfile(p)):
             return False
         mp = self._meta_path(id_)
-        if name is None or name == "":
-            # clear name by deleting meta or setting empty
+        # read current meta
+        meta: Dict[str, object] = {}
+        if os.path.isfile(mp):
             try:
+                with open(mp, "r", encoding="utf-8") as mf:
+                    meta = json.load(mf) or {}
+            except Exception:
+                meta = {}
+        # update name
+        if name is None or name == "":
+            meta.pop("name", None)
+        else:
+            meta["name"] = name
+        # write or delete file if empty
+        try:
+            if meta:
+                with open(mp, "w", encoding="utf-8") as mf:
+                    json.dump(meta, mf, ensure_ascii=False)
+            else:
                 if os.path.isfile(mp):
                     os.remove(mp)
-            except Exception:
-                pass
-            return True
-        try:
-            with open(mp, "w", encoding="utf-8") as mf:
-                json.dump({"name": name}, mf, ensure_ascii=False)
             return True
         except Exception:
             return False
@@ -181,6 +212,46 @@ class FilesystemStore:
                     n = meta.get("name")
                     if isinstance(n, str):
                         return n
+            except Exception:
+                return None
+        return None
+
+    def set_key(self, id_: str, key: Optional[str]) -> bool:
+        p = self._path(id_)
+        if not (os.path.exists(p) and os.path.isfile(p)):
+            return False
+        mp = self._meta_path(id_)
+        meta: Dict[str, object] = {}
+        if os.path.isfile(mp):
+            try:
+                with open(mp, "r", encoding="utf-8") as mf:
+                    meta = json.load(mf) or {}
+            except Exception:
+                meta = {}
+        if key is None or key == "":
+            meta.pop("key", None)
+        else:
+            meta["key"] = key
+        try:
+            if meta:
+                with open(mp, "w", encoding="utf-8") as mf:
+                    json.dump(meta, mf, ensure_ascii=False)
+            else:
+                if os.path.isfile(mp):
+                    os.remove(mp)
+            return True
+        except Exception:
+            return False
+
+    def get_key(self, id_: str) -> Optional[str]:
+        mp = self._meta_path(id_)
+        if os.path.isfile(mp):
+            try:
+                with open(mp, "r", encoding="utf-8") as mf:
+                    meta = json.load(mf)
+                    k = meta.get("key")
+                    if isinstance(k, str) and k:
+                        return k
             except Exception:
                 return None
         return None
